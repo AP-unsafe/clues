@@ -1,3 +1,6 @@
+use std::fmt::Display;
+
+// TODO: use Geometry's Cell
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 #[deprecated(note = "Use Geometry's Cell implementation")]
 pub struct Cell {
@@ -47,6 +50,19 @@ pub enum Bound {
     AtLeast(i32),
     AtMost(i32),
 }
+
+impl Bound {
+    // checks whethever a given bound contains val
+    pub fn holds_val(self, val: i32) -> bool {
+        todo!();
+    }
+
+    // relaxes a bound by amount
+    pub fn relax(self, amount: i32) -> Bound {
+        todo!()
+    }
+}
+
 impl Clue {
     // True when this clue is consistent with the treasure lying in ‘cell‘.
     // TODO: deal with overflows here
@@ -68,8 +84,35 @@ impl Clue {
             Clue::Nearer { a, b } => cell.distance(a) < cell.distance(b),
         }
     }
+
+    // returns a weaker version of a clue
+    // 2 properties:
+    // - every cell satisfying the current Clue must satisfy the weaker version as well
+    // - weaken always produces a weaker clue of the same type
+    // useful for islands which may produce clues that are n times weaker then the full one
+    // also allows the island to gradually strengthen the clue
+    // a helper for island
+    // a helper for islands, prevents them from issuing clues of differe
+    pub fn weaken(self, times: u8) -> Clue {
+        todo!()
+    }
+
+    // returns true if self is weaker than other, otherwise returns false
+    // returns Err if the two clues are of different types
+    // useful for ships that will be trying to figure out if the clue they received is a weaker than
+    // a previous one
+    pub fn is_weaker_than(self, other: Clue) -> Result<bool, String> {
+        todo!()
+    }
 }
 
+impl Display for Clue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+// TODO: tests
 #[cfg(test)]
 pub mod tests {
     use super::*; // brings everything from clues to tests
