@@ -1,5 +1,10 @@
 use std::fmt::Display;
 
+use crate::Bound::{AtLeast, AtMost};
+
+// TODO: logs
+// TODO: run pedantic clippy
+
 // TODO: use Geometry's Cell
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 #[deprecated(note = "Use Geometry's Cell implementation")]
@@ -53,13 +58,16 @@ pub enum Bound {
 
 impl Bound {
     // checks whethever a given bound contains val
-    pub fn holds_val(self, val: i32) -> bool {
+    fn holds_val(self, val: i32) -> bool {
         todo!();
     }
 
-    // relaxes a bound by amount
-    pub fn relax(self, amount: i32) -> Bound {
-        todo!()
+    // relaxes (makes it weaker) a bound by amount
+    fn relax(self, amount: u32) -> Bound {
+        match self {
+            AtLeast(n) => Bound::AtLeast(n - amount as i32),
+            AtMost(n) => Bound::AtMost(n + amount as i32),
+        }
     }
 }
 
@@ -93,16 +101,73 @@ impl Clue {
     // also allows the island to gradually strengthen the clue
     // a helper for island
     // a helper for islands, prevents them from issuing clues of differe
-    pub fn weaken(self, times: u8) -> Clue {
-        todo!()
+    pub fn weaken(self, times: u32) -> Clue {
+        match self {
+            Clue::Within { centre, radius } => Clue::Within {
+                centre,
+                radius: radius + times,
+            },
+            Clue::Beyond { centre, radius } => Clue::Beyond {
+                centre,
+                radius: radius - times,
+            },
+            Clue::HalfPlane { axis, bound } => Clue::HalfPlane {
+                axis,
+                bound: bound.relax(times),
+            },
+            // TODO: finish nearer
+            Clue::Nearer { a, b } => Clue::Nearer { a, b },
+        }
     }
 
-    // returns true if self is weaker than other, otherwise returns false
+    // returns true if self is weaker than other
+    // if self is atleast as strong as other -> returns false
     // returns Err if the two clues are of different types
     // useful for ships that will be trying to figure out if the clue they received is a weaker than
     // a previous one
     pub fn is_weaker_than(self, other: Clue) -> Result<bool, String> {
-        todo!()
+        match self {
+            Clue::Within { centre, radius } => {
+                if let Clue::Within {
+                    centre: c,
+                    radius: r,
+                } = other
+                {
+                    if centre != c {
+                        return Err("Cannot compare Within with different centers".into());
+                    }
+                    return Ok(radius < r);
+                }
+            }
+
+            Clue::Beyond { centre, radius } => {
+                if let Clue::Beyond {
+                    centre: c,
+                    radius: r,
+                } = other
+                {
+                    if centre != c {
+                        return Err("Cannot compare Beyond with different centers".into());
+                    }
+                    return Ok(radius >= r);
+                }
+            }
+
+            // TODO: finish HalfPlane
+            Clue::HalfPlane { axis, bound } => {
+                if let Clue::HalfPlane { axis: a, bound: b } = other {
+                    if axis != a || bound != b {
+                        return Err("Cannot compare HalfPlane with different axis / bound".into());
+                    }
+
+                    return Ok(true);
+                }
+            }
+
+            // TODO: finish Nearer
+            Clue::Nearer { a: a2, b: b2 } => {}
+        };
+        Err("The clues are of different types".into())
     }
 }
 
