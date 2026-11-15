@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, format};
 
 use crate::Bound::{AtLeast, AtMost};
 
@@ -50,10 +50,34 @@ pub enum Axis {
     R,
     S,
 }
+
+impl Display for Axis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Axis::Q => "Q",
+            Axis::R => "R",
+            Axis::S => "S",
+        };
+
+        write!(f, "{str}")
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Bound {
     AtLeast(i32),
     AtMost(i32),
+}
+
+impl Display for Bound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Bound::AtLeast(n) => format!("at least {n}"),
+            Bound::AtMost(n) => format!("at most {n}"),
+        };
+
+        write!(f, "{str}")
+    }
 }
 
 impl Bound {
@@ -73,7 +97,6 @@ impl Bound {
 
 impl Clue {
     // True when this clue is consistent with the treasure lying in ‘cell‘.
-    // TODO: deal with overflows here
     pub fn holds(self, cell: Cell) -> bool {
         match self {
             Clue::Within { centre, radius } => cell.distance(centre) <= radius,
@@ -173,7 +196,36 @@ impl Clue {
 
 impl Display for Clue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        let str = match self {
+            Clue::Within { centre, radius } => format!(
+                "The treasure is within {} units of ({},{},{}) cell",
+                radius,
+                centre.q,
+                centre.r,
+                centre.s(),
+            ),
+            Clue::Beyond { centre, radius } => format!(
+                "The treasure is beyond {} units from the ({},{},{}) cell",
+                radius,
+                centre.q,
+                centre.r,
+                centre.s(),
+            ),
+            Clue::HalfPlane { axis, bound } => {
+                format!("The treasure is {} on the {} axis", bound, axis)
+            }
+            Clue::Nearer { a, b } => format!(
+                "The treasure is nearer to ({}, {}, {}) than to ({}, {}, {})",
+                a.q,
+                a.r,
+                a.s(),
+                b.q,
+                b.r,
+                b.s()
+            ),
+        };
+
+        write!(f, "{str}")
     }
 }
 
@@ -183,7 +235,46 @@ pub mod tests {
     use super::*; // brings everything from clues to tests
 
     #[test]
-    fn it_works() {
-        todo!();
+    fn display_variants() {
+        let c1 = Cell { q: 1, r: -2 };
+        let c2 = Cell { q: 17, r: 91 };
+        let cases = [
+            (
+                Clue::Within {
+                    centre: c1,
+                    radius: 3,
+                },
+                "The treasure is within 3 units of (1,-2,1) cell",
+            ),
+            (
+                Clue::Beyond {
+                    centre: c1,
+                    radius: 3,
+                },
+                "The treasure is beyond 3 units from the (1,-2,1) cell",
+            ),
+            (
+                Clue::HalfPlane {
+                    axis: Axis::Q,
+                    bound: Bound::AtLeast(4),
+                },
+                "The treasure is at least 4 on the Q axis",
+            ),
+            (
+                Clue::HalfPlane {
+                    axis: Axis::S,
+                    bound: Bound::AtMost(-2),
+                },
+                "The treasure is at most -2 on the S axis",
+            ),
+            (
+                Clue::Nearer { a: c1, b: c2 },
+                "The treasure is nearer to (1, -2, 1) than to (17, 91, -108)",
+            ),
+        ];
+
+        for (clue, expected) in cases {
+            assert_eq!(clue.to_string(), expected);
+        }
     }
 }
