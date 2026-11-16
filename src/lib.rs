@@ -159,7 +159,7 @@ impl Clue {
                     if centre != c {
                         return Err("Cannot compare Within with different centers".into());
                     }
-                    return Ok(radius < r);
+                    return Ok(radius > r);
                 }
             }
 
@@ -172,23 +172,33 @@ impl Clue {
                     if centre != c {
                         return Err("Cannot compare Beyond with different centers".into());
                     }
-                    return Ok(radius >= r);
+                    return Ok(radius < r);
                 }
             }
 
             // TODO: finish HalfPlane
             Clue::HalfPlane { axis, bound } => {
                 if let Clue::HalfPlane { axis: a, bound: b } = other {
-                    if axis != a || bound != b {
+                    if axis != a {
                         return Err("Cannot compare HalfPlane with different axis / bound".into());
                     }
-
-                    return Ok(true);
+                    match (bound, b) {
+                        (AtLeast(first), AtLeast(second))=>return Ok(first < second),
+                        (AtMost(first),AtMost(second))=>return Ok(b1 > b2),
+                        _=> return Err("The two Clues are not compatible".into()),
+                    };
                 }
             }
 
             // TODO: finish Nearer
-            Clue::Nearer { a: a2, b: b2 } => {}
+            Clue::Nearer { a: a1, b: b1 } => {
+                if let Clue::Nearer {a: a2, b: b2} = other{
+                    if a1 != a2 {
+                        return Err("Cannot compare Nearer with different A".into());
+                    }
+                    return Ok(a1.distance(b1) >= a1.distance(b2));
+                }
+            }
         };
         Err("The clues are of different types".into())
     }
