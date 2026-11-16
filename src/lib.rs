@@ -184,7 +184,7 @@ impl Clue {
                     }
                     match (bound, b) {
                         (AtLeast(first), AtLeast(second))=>return Ok(first < second),
-                        (AtMost(first),AtMost(second))=>return Ok(b1 > b2),
+                        (AtMost(first),AtMost(second))=>return Ok(first > second),
                         _=> return Err("The two Clues are not compatible".into()),
                     };
                 }
