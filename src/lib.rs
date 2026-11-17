@@ -63,10 +63,17 @@ impl Bound {
     }
 
     // relaxes (makes it weaker) a bound by amount
-    fn relax(self, amount: u32) -> Bound {
+    fn relax(self, amount: u32) -> Option<Bound> {
+        let amount = i64::from(amount);
         match self {
-            AtLeast(n) => Bound::AtLeast(n - amount as i32),
-            AtMost(n) => Bound::AtMost(n + amount as i32),
+            AtLeast(n) => {
+                let value = i64::from(n).checked_sub(amount)?;
+                Some(AtLeast(i32::try_from(value).ok()?))
+            },
+            AtMost(n) => {
+                let value = i64::from(n).checked_add(amount)?;
+                Some(AtMost(i32::try_from(value).ok()?))
+            }
         }
     }
 }
@@ -91,7 +98,8 @@ impl Clue {
             Clue::Nearer { a, b } => cell.distance(a) < cell.distance(b),
         }
     }
-
+    
+    /* 
     // returns a weaker version of a clue
     // 2 properties:
     // - every cell satisfying the current Clue must satisfy the weaker version as well
@@ -100,7 +108,7 @@ impl Clue {
     // also allows the island to gradually strengthen the clue
     // a helper for island
     // a helper for islands, prevents them from issuing clues of differe
-    pub fn weaken(self, times: u32) -> Clue {
+    pub fn weaken(self, map: &Map, times: u32) -> Clue {
         match self {
             Clue::Within { centre, radius } => Clue::Within {
                 centre,
@@ -114,10 +122,125 @@ impl Clue {
                 axis,
                 bound: bound.relax(times),
             },
-            // TODO: finish nearer
-            Clue::Nearer { a, b } => Clue::Nearer { a, b },
+            Clue::Nearer { a, b } => Clue::Nearer { 
+                assert!(times >= 2, "To weaken a Nearer Clue, times must be at least 2");
+            
+                // Calculate the direction from A to B
+                let direction_q = b.q - a.q;
+                let direction_r = b.r - a.r;
+            
+                // Generate all valid candidate cells inside the map
+                let mut candidates: Vec<(u32, Cell)> = Vec::new();
+
+                let mut k: i32 = 2;
+                loop {
+                    let candidate = Cell {
+                        q: a.q + k * direction_q,
+                        r: a.r + k * direction_r,
+                    };
+                
+                    // Stop when the candidate leaves the map
+                    if !map.contains(candidate) {
+                        break;
+                    }
+                    candidates.push((k as u32, candidate));
+                    k += 1;
+                }
+            
+                // 3. Select the candidate corresponding to the requested multiplier
+                let new_b = candidates
+                    .iter()
+                    .find(|(candidate_k, _)| *candidate_k == times)
+                    .map(|(_, cell)| *cell)
+                    .expect("No candidate available for the requested weakening");
+            
+                // 4. Return the weakened clue.
+                Clue::Nearer {
+                    a,
+                    b: new_b,
+                }
+            },
         }
     }
+    */
+
+    pub fn weaken(self, map: &Map, times: u32) -> Option<Clue> {
+        match self {
+            Clue::Within { centre, radius } => {
+                let new_radius = radius.checked_add(times)?;
+
+                Some(Clue::Within {
+                    centre,
+                    radius: new_radius,
+                })
+            },
+            Clue::Beyond { centre, radius } => {
+                let new_radius = radius.checked_sub(times)?;
+
+                Some(Clue::Beyond {
+                    centre,
+                    radius: new_radius,
+                })
+            },
+            Clue::HalfPlane { axis, bound } => {
+                Some(Clue::HalfPlane {
+                    axis,
+                    bound: bound.relax(times)?,
+                })
+            }
+            Clue::Nearer { a, b } => {
+                if times < 2 || a == b {
+                    return None;
+                }
+
+                // Calculate the direction from A to B
+                let direction_q = i64::from(b.q) - i64::from(a.q);
+                let direction_r = i64::from(b.r) - i64::from(a.r);
+                
+                // Generate all valid candidate cells inside the map
+                let mut candidates: Vec<(u32, Cell)> = Vec::new();
+    
+                let mut k: u32 = 2;                    
+                loop {
+                    // Calculate candidate coordinates using checked arithmetic
+                    let k_i64 = i64::from(k);
+                
+                    let q = i64::from(a.q).checked_add(k_i64.checked_mul(direction_q)?)?;
+                
+                    let r = i64::from(a.r).checked_add(k_i64.checked_mul(direction_r)?)?;
+                
+                    // Convert coordinates back to i32
+                    let candidate = Cell {
+                        q: i32::try_from(q).ok()?,
+                        r: i32::try_from(r).ok()?,
+                    };
+                
+                    // Stop when the candidate leaves the map
+                    if !map.contains(candidate) {
+                        break;
+                    }
+                
+                    candidates.push((k, candidate));
+                
+                    // Avoid overflowing the multiplier
+                    k = k.checked_add(1)?;
+                }
+            
+                // Select the candidate corresponding to the requested multiplier
+                let new_b = candidates
+                    .iter()
+                    .find(|(candidate_k, _)| *candidate_k == times)
+                    .map(|(_, cell)| *cell)?;
+            
+                // Return the weakened clue
+                Some(Clue::Nearer {
+                    a,
+                    b: new_b,
+                })
+            }
+        }
+    }
+
 
     // returns true if self is weaker than other
     // if self is atleast as strong as other -> returns false
