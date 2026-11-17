@@ -2,34 +2,10 @@ use std::fmt::{Display, format};
 
 use crate::Bound::{AtLeast, AtMost};
 
+use geometry::{Cell, Map};
+
 // TODO: logs
 // TODO: run pedantic clippy
-
-// TODO: use Geometry's Cell
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-#[deprecated(note = "Use Geometry's Cell implementation")]
-pub struct Cell {
-    pub q: i32,
-    pub r: i32,
-}
-
-impl Cell {
-    pub fn s(&self) -> i32 {
-        -self.q - self.r
-    }
-
-    pub fn distance(self, other: Cell) -> u32 {
-        // calculating Delta q / r / s
-        let dq = self.q.abs_diff(other.q);
-        let dr = self.r.abs_diff(other.r);
-        let ds = self.s().abs_diff(other.s());
-
-        dq.checked_add(dr)
-            .and_then(|sum| sum.checked_add(ds))
-            .expect("distance overflow u32")
-            / 2
-    }
-}
 
 #[non_exhaustive]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
