@@ -248,58 +248,33 @@ impl Clue {
     // useful for ships that will be trying to figure out if the clue they received is a weaker than
     // a previous one
     pub fn is_weaker_than(self, other: Clue) -> Result<bool, String> {
-        match self {
-            Clue::Within { centre, radius } => {
-                if let Clue::Within {
-                    centre: c,
-                    radius: r,
-                } = other
-                {
-                    if centre != c {
-                        return Err("Cannot compare Within with different centers".into());
-                    }
-                    return Ok(radius > r);
-                }
-            }
+        match (self, other) {
+            //Two within clues
+            (Clue::Within { centre:c1, radius:r1 },Clue::Within {centre: c2, radius: r2,}) if c1==c2 =>{
+                return Ok(r1 > r2)
+            },
 
-            Clue::Beyond { centre, radius } => {
-                if let Clue::Beyond {
-                    centre: c,
-                    radius: r,
-                } = other
-                {
-                    if centre != c {
-                        return Err("Cannot compare Beyond with different centers".into());
-                    }
-                    return Ok(radius < r);
-                }
-            }
+            //Two beyond clues
+            (Clue::Beyond { centre:c1, radius:r1 }, Clue::Beyond { centre: c2, radius: r2,}) if c1==c2 => {
+                return Ok(r1 < r2);
+            },
 
-            // TODO: finish HalfPlane
-            Clue::HalfPlane { axis, bound } => {
-                if let Clue::HalfPlane { axis: a, bound: b } = other {
-                    if axis != a {
-                        return Err("Cannot compare HalfPlane with different axis / bound".into());
-                    }
-                    match (bound, b) {
-                        (AtLeast(first), AtLeast(second))=>return Ok(first < second),
-                        (AtMost(first),AtMost(second))=>return Ok(first > second),
-                        _=> return Err("The two Clues are not compatible".into()),
-                    };
-                }
-            }
+            //Two halfplane clues
+            (Clue::HalfPlane { axis:a1, bound:b1 }, Clue::HalfPlane { axis: a2, bound: b2 }) if a1==a2 => {
+                match (b1, b2) {
+                    (AtLeast(first), AtLeast(second))=>return Ok(first < second),
+                    (AtMost(first),AtMost(second))=>return Ok(first > second),
+                    _=> return Err("The two Clues are not compatible".into()),
+                };
+            },
 
-            // TODO: finish Nearer
-            Clue::Nearer { a: a1, b: b1 } => {
-                if let Clue::Nearer {a: a2, b: b2} = other{
-                    if a1 != a2 {
-                        return Err("Cannot compare Nearer with different A".into());
-                    }
-                    return Ok(a1.distance(b1) >= a1.distance(b2));
-                }
-            }
-        };
-        Err("The clues are of different types".into())
+            //Two nearer clues
+            (Clue::Nearer { a: a1, b: b1 }, Clue::Nearer {a: a2, b: b2}) if a1==a2 => {
+                return Ok(a1.distance(b1) >= a1.distance(b2));
+            },
+
+            _=> Err("can't comptare the two clues".into())
+        }
     }
 }
 
