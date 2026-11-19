@@ -5,47 +5,123 @@ fn cell(q: i32, r: i32) -> Cell {
     Cell { q, r }
 }
 
-#[test]
-fn display_variants() {
-    let c1 = Cell { q: 1, r: -2 };
-    let c2 = Cell { q: 17, r: 91 };
-    let cases = [
-        (
-            Clue::Within {
-                centre: c1,
-                radius: 3,
-            },
-            "The treasure is within 3 units of (1,-2,1) cell",
-        ),
-        (
-            Clue::Beyond {
-                centre: c1,
-                radius: 3,
-            },
-            "The treasure is beyond 3 units from the (1,-2,1) cell",
-        ),
-        (
-            Clue::HalfPlane {
-                axis: Axis::Q,
-                bound: Bound::AtLeast(4),
-            },
-            "The treasure is at least 4 on the Q axis",
-        ),
-        (
-            Clue::HalfPlane {
-                axis: Axis::S,
-                bound: Bound::AtMost(-2),
-            },
-            "The treasure is at most -2 on the S axis",
-        ),
-        (
-            Clue::Nearer { a: c1, b: c2 },
-            "The treasure is nearer to (1, -2, 1) than to (17, 91, -108)",
-        ),
-    ];
+mod common {
+    use super::*;
 
-    for (clue, expected) in cases {
-        assert_eq!(clue.to_string(), expected);
+    #[test]
+    fn display_variants() {
+        let c1 = Cell { q: 1, r: -2 };
+        let c2 = Cell { q: 17, r: 91 };
+        let cases = [
+            (
+                Clue::Within {
+                    centre: c1,
+                    radius: 3,
+                },
+                "The treasure is within 3 units of (1,-2,1) cell",
+            ),
+            (
+                Clue::Beyond {
+                    centre: c1,
+                    radius: 3,
+                },
+                "The treasure is beyond 3 units from the (1,-2,1) cell",
+            ),
+            (
+                Clue::HalfPlane {
+                    axis: Axis::Q,
+                    bound: Bound::AtLeast(4),
+                },
+                "The treasure is at least 4 on the Q axis",
+            ),
+            (
+                Clue::HalfPlane {
+                    axis: Axis::S,
+                    bound: Bound::AtMost(-2),
+                },
+                "The treasure is at most -2 on the S axis",
+            ),
+            (
+                Clue::Nearer { a: c1, b: c2 },
+                "The treasure is nearer to (1, -2, 1) than to (17, 91, -108)",
+            ),
+        ];
+
+        for (clue, expected) in cases {
+            assert_eq!(clue.to_string(), expected);
+        }
+    }
+}
+
+mod holds_tests {
+    use super::*;
+
+    #[test]
+    fn within_holds_up_to_radius() {
+        let clue = Clue::Within {
+            centre: cell(0, 0),
+            radius: 2,
+        };
+
+        assert!(clue.holds(cell(0, 0)));
+        assert!(clue.holds(cell(2, 0))); // exactly on the boundary
+        assert!(!clue.holds(cell(3, 0))); // outside within
+    }
+
+    #[test]
+    fn beyond_holds_strictly_past_radius() {
+        let clue = Clue::Beyond {
+            centre: cell(0, 0),
+            radius: 2,
+        };
+
+        assert!(clue.holds(cell(3, 0)));
+        assert!(!clue.holds(cell(2, 0))); // exactly on the boundary
+        assert!(!clue.holds(cell(0, 0))); // inside beyond
+    }
+
+    #[test]
+    fn half_plane_bounds_are_inclusive() {
+        let c = cell(3, -1); // q = 3, r = -1, s = -2
+
+        // tests the Q axis with AtLeast
+        let at_least = |k| Clue::HalfPlane {
+            axis: Axis::Q,
+            bound: Bound::AtLeast(k),
+        };
+        // tests the R axis with AtMost
+        let at_most = |k| Clue::HalfPlane {
+            axis: Axis::R,
+            bound: Bound::AtMost(k),
+        };
+
+        assert!(at_least(3).holds(c));
+        assert!(!at_least(4).holds(c));
+        assert!(at_most(3).holds(c));
+        assert!(!at_most(-2).holds(c));
+    }
+
+    #[test]
+    fn nearer_holds_when_strictly_closer() {
+        let clue = Clue::Nearer {
+            a: cell(0, 0),
+            b: cell(4, 0),
+        };
+
+        assert!(clue.holds(cell(1, 0)));
+        assert!(!clue.holds(cell(2, 0))); // must be strictly closer
+        assert!(!clue.holds(cell(3, 0))); // closer to b
+    }
+
+    #[test]
+    fn nearer_not_equal_distances() {
+        let clue = Clue::Nearer {
+            a: cell(0, 0),
+            b: cell(4, 0),
+        };
+
+        // (2,0) is at distance 2 from both a and b
+        assert!(!clue.holds(cell(2, 0)));
     }
 }
 
