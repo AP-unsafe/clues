@@ -69,7 +69,7 @@ impl Bound {
             AtLeast(n) => {
                 let value = i64::from(n).checked_sub(amount)?;
                 Some(AtLeast(i32::try_from(value).ok()?))
-            },
+            }
             AtMost(n) => {
                 let value = i64::from(n).checked_add(amount)?;
                 Some(AtMost(i32::try_from(value).ok()?))
@@ -98,71 +98,6 @@ impl Clue {
             Clue::Nearer { a, b } => cell.distance(a) < cell.distance(b),
         }
     }
-    
-    /* 
-    // returns a weaker version of a clue
-    // 2 properties:
-    // - every cell satisfying the current Clue must satisfy the weaker version as well
-    // - weaken always produces a weaker clue of the same type
-    // useful for islands which may produce clues that are n times weaker then the full one
-    // also allows the island to gradually strengthen the clue
-    // a helper for island
-    // a helper for islands, prevents them from issuing clues of differe
-    pub fn weaken(self, map: &Map, times: u32) -> Clue {
-        match self {
-            Clue::Within { centre, radius } => Clue::Within {
-                centre,
-                radius: radius + times,
-            },
-            Clue::Beyond { centre, radius } => Clue::Beyond {
-                centre,
-                radius: radius - times,
-            },
-            Clue::HalfPlane { axis, bound } => Clue::HalfPlane {
-                axis,
-                bound: bound.relax(times),
-            },
-            Clue::Nearer { a, b } => Clue::Nearer { 
-                assert!(times >= 2, "To weaken a Nearer Clue, times must be at least 2");
-            
-                // Calculate the direction from A to B
-                let direction_q = b.q - a.q;
-                let direction_r = b.r - a.r;
-            
-                // Generate all valid candidate cells inside the map
-                let mut candidates: Vec<(u32, Cell)> = Vec::new();
-
-                let mut k: i32 = 2;
-                loop {
-                    let candidate = Cell {
-                        q: a.q + k * direction_q,
-                        r: a.r + k * direction_r,
-                    };
-                
-                    // Stop when the candidate leaves the map
-                    if !map.contains(candidate) {
-                        break;
-                    }
-                    candidates.push((k as u32, candidate));
-                    k += 1;
-                }
-            
-                // 3. Select the candidate corresponding to the requested multiplier
-                let new_b = candidates
-                    .iter()
-                    .find(|(candidate_k, _)| *candidate_k == times)
-                    .map(|(_, cell)| *cell)
-                    .expect("No candidate available for the requested weakening");
-            
-                // 4. Return the weakened clue.
-                Clue::Nearer {
-                    a,
-                    b: new_b,
-                }
-            },
-        }
-    }
-    */
 
     pub fn weaken(self, map: &Map, times: u32) -> Option<Clue> {
         match self {
@@ -173,7 +108,7 @@ impl Clue {
                     centre,
                     radius: new_radius,
                 })
-            },
+            }
             Clue::Beyond { centre, radius } => {
                 let new_radius = radius.checked_sub(times)?;
 
@@ -181,13 +116,11 @@ impl Clue {
                     centre,
                     radius: new_radius,
                 })
-            },
-            Clue::HalfPlane { axis, bound } => {
-                Some(Clue::HalfPlane {
-                    axis,
-                    bound: bound.relax(times)?,
-                })
             }
+            Clue::HalfPlane { axis, bound } => Some(Clue::HalfPlane {
+                axis,
+                bound: bound.relax(times)?,
+            }),
             Clue::Nearer { a, b } => {
                 if times < 2 || a == b {
                     return None;
@@ -196,51 +129,47 @@ impl Clue {
                 // Calculate the direction from A to B
                 let direction_q = i64::from(b.q) - i64::from(a.q);
                 let direction_r = i64::from(b.r) - i64::from(a.r);
-                
+
                 // Generate all valid candidate cells inside the map
                 let mut candidates: Vec<(u32, Cell)> = Vec::new();
-    
-                let mut k: u32 = 2;                    
+
+                let mut k: u32 = 2;
                 loop {
                     // Calculate candidate coordinates using checked arithmetic
                     let k_i64 = i64::from(k);
-                
+
                     let q = i64::from(a.q).checked_add(k_i64.checked_mul(direction_q)?)?;
-                
+
                     let r = i64::from(a.r).checked_add(k_i64.checked_mul(direction_r)?)?;
-                
+
                     // Convert coordinates back to i32
                     let candidate = Cell {
                         q: i32::try_from(q).ok()?,
                         r: i32::try_from(r).ok()?,
                     };
-                
+
                     // Stop when the candidate leaves the map
                     if !map.contains(candidate) {
                         break;
                     }
-                
+
                     candidates.push((k, candidate));
-                
+
                     // Avoid overflowing the multiplier
                     k = k.checked_add(1)?;
                 }
-            
+
                 // Select the candidate corresponding to the requested multiplier
                 let new_b = candidates
                     .iter()
                     .find(|(candidate_k, _)| *candidate_k == times)
                     .map(|(_, cell)| *cell)?;
-            
+
                 // Return the weakened clue
-                Some(Clue::Nearer {
-                    a,
-                    b: new_b,
-                })
+                Some(Clue::Nearer { a, b: new_b })
             }
         }
     }
-
 
     // returns true if self is weaker than other
     // if self is atleast as strong as other -> returns false
@@ -250,30 +179,51 @@ impl Clue {
     pub fn is_weaker_than(self, other: Clue) -> Result<bool, String> {
         match (self, other) {
             //Two within clues
-            (Clue::Within { centre:c1, radius:r1 },Clue::Within {centre: c2, radius: r2,}) if c1==c2 =>{
-                return Ok(r1 > r2)
-            },
+            (
+                Clue::Within {
+                    centre: c1,
+                    radius: r1,
+                },
+                Clue::Within {
+                    centre: c2,
+                    radius: r2,
+                },
+            ) if c1 == c2 => Ok(r1 > r2),
 
             //Two beyond clues
-            (Clue::Beyond { centre:c1, radius:r1 }, Clue::Beyond { centre: c2, radius: r2,}) if c1==c2 => {
-                return Ok(r1 < r2);
-            },
+            (
+                Clue::Beyond {
+                    centre: c1,
+                    radius: r1,
+                },
+                Clue::Beyond {
+                    centre: c2,
+                    radius: r2,
+                },
+            ) if c1 == c2 => Ok(r1 < r2),
 
             //Two halfplane clues
-            (Clue::HalfPlane { axis:a1, bound:b1 }, Clue::HalfPlane { axis: a2, bound: b2 }) if a1==a2 => {
-                match (b1, b2) {
-                    (AtLeast(first), AtLeast(second))=>return Ok(first < second),
-                    (AtMost(first),AtMost(second))=>return Ok(first > second),
-                    _=> return Err("The two Clues are not compatible".into()),
-                };
+            (
+                Clue::HalfPlane {
+                    axis: a1,
+                    bound: b1,
+                },
+                Clue::HalfPlane {
+                    axis: a2,
+                    bound: b2,
+                },
+            ) if a1 == a2 => match (b1, b2) {
+                (AtLeast(first), AtLeast(second)) => Ok(first < second),
+                (AtMost(first), AtMost(second)) => Ok(first > second),
+                _ => Err("The two Clues are not compatible".into()),
             },
 
             //Two nearer clues
-            (Clue::Nearer { a: a1, b: b1 }, Clue::Nearer {a: a2, b: b2}) if a1==a2 => {
-                return Ok(a1.distance(b1) >= a1.distance(b2));
-            },
+            (Clue::Nearer { a: a1, b: b1 }, Clue::Nearer { a: a2, b: b2 }) if a1 == a2 => {
+                Ok(a1.distance(b1) >= a1.distance(b2))
+            }
 
-            _=> Err("can't comptare the two clues".into())
+            _ => Err("can't comptare the two clues".into()),
         }
     }
 }
