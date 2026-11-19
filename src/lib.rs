@@ -1,4 +1,4 @@
-use std::fmt::{Display, format};
+use std::fmt::Display;
 
 use crate::Bound::{AtLeast, AtMost};
 
@@ -57,11 +57,6 @@ impl Display for Bound {
 }
 
 impl Bound {
-    // checks whethever a given bound contains val
-    fn holds_val(self, val: i32) -> bool {
-        todo!();
-    }
-
     // relaxes (makes it weaker) a bound by amount
     fn relax(self, amount: u32) -> Option<Bound> {
         let amount = i64::from(amount);
@@ -122,6 +117,7 @@ impl Clue {
                 bound: bound.relax(times)?,
             }),
             Clue::Nearer { a, b } => {
+                // if a == b -> can't calculate the direction
                 if times < 2 || a == b {
                     return None;
                 }
@@ -133,7 +129,9 @@ impl Clue {
                 // Generate all valid candidate cells inside the map
                 let mut candidates: Vec<(u32, Cell)> = Vec::new();
 
+                // k indicates how far along the axis between A and B the candidate cell is
                 let mut k: u32 = 2;
+
                 loop {
                     // Calculate candidate coordinates using checked arithmetic
                     let k_i64 = i64::from(k);
@@ -268,6 +266,11 @@ impl Display for Clue {
 pub mod tests {
     use super::*; // brings everything from clues to tests
 
+    // a small helper to create cells inline
+    fn cell(q: i32, r: i32) -> Cell {
+        Cell { q, r }
+    }
+
     #[test]
     fn display_variants() {
         let c1 = Cell { q: 1, r: -2 };
@@ -309,6 +312,141 @@ pub mod tests {
 
         for (clue, expected) in cases {
             assert_eq!(clue.to_string(), expected);
+        }
+    }
+
+    mod is_weaker_than_tests {
+        use super::*;
+
+        #[test]
+        fn weaker_clues_recognized() {
+            let c = cell(0, 0);
+
+            // Within: bigger radius is weaker
+            let within_weak = Clue::Within {
+                centre: c,
+                radius: 5,
+            };
+            let within_strong = Clue::Within {
+                centre: c,
+                radius: 2,
+            };
+            assert_eq!(within_weak.is_weaker_than(within_strong), Ok(true));
+            assert_eq!(within_strong.is_weaker_than(within_weak), Ok(false));
+
+            // Beyond: smaller radius is weaker
+            let beyond_weak = Clue::Beyond {
+                centre: c,
+                radius: 1,
+            };
+            let beyond_strong = Clue::Beyond {
+                centre: c,
+                radius: 4,
+            };
+            assert_eq!(beyond_weak.is_weaker_than(beyond_strong), Ok(true));
+            assert_eq!(beyond_strong.is_weaker_than(beyond_weak), Ok(false));
+
+            // HalfPlane: AtLeast with a lower bound is weaker
+            let half_weak = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtLeast(1),
+            };
+            let half_strong = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtLeast(5),
+            };
+            assert_eq!(half_weak.is_weaker_than(half_strong), Ok(true));
+            assert_eq!(half_strong.is_weaker_than(half_weak), Ok(false));
+
+            // Nearer: b farther from a is weaker
+            let nearer_weak = Clue::Nearer {
+                a: c,
+                b: cell(3, 0),
+            };
+            let nearer_strong = Clue::Nearer {
+                a: c,
+                b: cell(1, 0),
+            };
+            assert_eq!(nearer_weak.is_weaker_than(nearer_strong), Ok(true));
+            assert_eq!(nearer_strong.is_weaker_than(nearer_weak), Ok(false));
+        }
+
+        #[test]
+        fn incompatible_clues_fail() {
+            // Within / Beyond: different centres
+            let w1 = Clue::Within {
+                centre: cell(0, 0),
+                radius: 3,
+            };
+            let w2 = Clue::Within {
+                centre: cell(1, 0),
+                radius: 3,
+            };
+            assert!(w1.is_weaker_than(w2).is_err());
+
+            let b1 = Clue::Beyond {
+                centre: cell(0, 0),
+                radius: 3,
+            };
+            let b2 = Clue::Beyond {
+                centre: cell(1, 0),
+                radius: 3,
+            };
+            assert!(b1.is_weaker_than(b2).is_err());
+
+            // HalfPlane: different axes
+            let h_q = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtLeast(1),
+            };
+            let h_r = Clue::HalfPlane {
+                axis: Axis::R,
+                bound: Bound::AtLeast(1),
+            };
+            assert!(h_q.is_weaker_than(h_r).is_err());
+
+            // HalfPlane: same axis, opposite bound kinds
+            let h_most = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtMost(1),
+            };
+            assert!(h_q.is_weaker_than(h_most).is_err());
+
+            // Nearer: different `a`
+            let n1 = Clue::Nearer {
+                a: cell(0, 0),
+                b: cell(2, 0),
+            };
+            let n2 = Clue::Nearer {
+                a: cell(1, 0),
+                b: cell(2, 0),
+            };
+            assert!(n1.is_weaker_than(n2).is_err());
+        }
+
+        #[test]
+        fn different_type_clues_cannot_be_compared() {
+            let within = Clue::Within {
+                centre: cell(0, 0),
+                radius: 3,
+            };
+            let beyond = Clue::Beyond {
+                centre: cell(0, 0),
+                radius: 3,
+            };
+            let half = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtLeast(0),
+            };
+            let nearer = Clue::Nearer {
+                a: cell(0, 0),
+                b: cell(1, 0),
+            };
+
+            assert!(within.is_weaker_than(beyond).is_err());
+            assert!(beyond.is_weaker_than(half).is_err());
+            assert!(half.is_weaker_than(nearer).is_err());
+            assert!(nearer.is_weaker_than(within).is_err());
         }
     }
 }
