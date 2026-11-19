@@ -218,7 +218,7 @@ impl Clue {
 
             //Two nearer clues
             (Clue::Nearer { a: a1, b: b1 }, Clue::Nearer { a: a2, b: b2 }) if a1 == a2 => {
-                Ok(a1.distance(b1) >= a1.distance(b2))
+                Ok(a1.distance(b1) > a1.distance(b2))
             }
 
             _ => Err("can't comptare the two clues".into()),
@@ -319,110 +319,145 @@ pub mod tests {
         use super::*;
 
         #[test]
-        fn weaker_clues_recognized() {
+        fn within_larger_radius_is_weaker() {
             let c = cell(0, 0);
-
-            // Within: bigger radius is weaker
-            let within_weak = Clue::Within {
+            let weak = Clue::Within {
                 centre: c,
                 radius: 5,
             };
-            let within_strong = Clue::Within {
+            let strong = Clue::Within {
                 centre: c,
                 radius: 2,
             };
-            assert_eq!(within_weak.is_weaker_than(within_strong), Ok(true));
-            assert_eq!(within_strong.is_weaker_than(within_weak), Ok(false));
 
-            // Beyond: smaller radius is weaker
-            let beyond_weak = Clue::Beyond {
-                centre: c,
-                radius: 1,
-            };
-            let beyond_strong = Clue::Beyond {
-                centre: c,
-                radius: 4,
-            };
-            assert_eq!(beyond_weak.is_weaker_than(beyond_strong), Ok(true));
-            assert_eq!(beyond_strong.is_weaker_than(beyond_weak), Ok(false));
-
-            // HalfPlane: AtLeast with a lower bound is weaker
-            let half_weak = Clue::HalfPlane {
-                axis: Axis::Q,
-                bound: Bound::AtLeast(1),
-            };
-            let half_strong = Clue::HalfPlane {
-                axis: Axis::Q,
-                bound: Bound::AtLeast(5),
-            };
-            assert_eq!(half_weak.is_weaker_than(half_strong), Ok(true));
-            assert_eq!(half_strong.is_weaker_than(half_weak), Ok(false));
-
-            // Nearer: b farther from a is weaker
-            let nearer_weak = Clue::Nearer {
-                a: c,
-                b: cell(3, 0),
-            };
-            let nearer_strong = Clue::Nearer {
-                a: c,
-                b: cell(1, 0),
-            };
-            assert_eq!(nearer_weak.is_weaker_than(nearer_strong), Ok(true));
-            assert_eq!(nearer_strong.is_weaker_than(nearer_weak), Ok(false));
+            assert_eq!(weak.is_weaker_than(strong), Ok(true));
+            assert_eq!(strong.is_weaker_than(weak), Ok(false));
         }
 
         #[test]
-        fn incompatible_clues_fail() {
-            // Within / Beyond: different centres
-            let w1 = Clue::Within {
-                centre: cell(0, 0),
-                radius: 3,
+        fn beyond_smaller_radius_is_weaker() {
+            let c = cell(0, 0);
+            let weak = Clue::Beyond {
+                centre: c,
+                radius: 1,
             };
-            let w2 = Clue::Within {
-                centre: cell(1, 0),
-                radius: 3,
+            let strong = Clue::Beyond {
+                centre: c,
+                radius: 4,
             };
-            assert!(w1.is_weaker_than(w2).is_err());
 
-            let b1 = Clue::Beyond {
-                centre: cell(0, 0),
-                radius: 3,
-            };
-            let b2 = Clue::Beyond {
-                centre: cell(1, 0),
-                radius: 3,
-            };
-            assert!(b1.is_weaker_than(b2).is_err());
+            assert_eq!(weak.is_weaker_than(strong), Ok(true));
+            assert_eq!(strong.is_weaker_than(weak), Ok(false));
+        }
 
-            // HalfPlane: different axes
-            let h_q = Clue::HalfPlane {
+        #[test]
+        fn half_plane_lower_at_least_bound_is_weaker() {
+            let weak = Clue::HalfPlane {
                 axis: Axis::Q,
                 bound: Bound::AtLeast(1),
             };
-            let h_r = Clue::HalfPlane {
-                axis: Axis::R,
-                bound: Bound::AtLeast(1),
-            };
-            assert!(h_q.is_weaker_than(h_r).is_err());
-
-            // HalfPlane: same axis, opposite bound kinds
-            let h_most = Clue::HalfPlane {
+            let strong = Clue::HalfPlane {
                 axis: Axis::Q,
-                bound: Bound::AtMost(1),
+                bound: Bound::AtLeast(5),
             };
-            assert!(h_q.is_weaker_than(h_most).is_err());
 
-            // Nearer: different `a`
-            let n1 = Clue::Nearer {
+            assert_eq!(weak.is_weaker_than(strong), Ok(true));
+            assert_eq!(strong.is_weaker_than(weak), Ok(false));
+        }
+
+        #[test]
+        fn nearer_farther_b_is_weaker() {
+            let a = cell(0, 0);
+            let weak = Clue::Nearer { a, b: cell(3, 0) };
+            let strong = Clue::Nearer { a, b: cell(1, 0) };
+
+            assert_eq!(weak.is_weaker_than(strong), Ok(true));
+            assert_eq!(strong.is_weaker_than(weak), Ok(false));
+        }
+
+        #[test]
+        fn equal_nearer_clues_are_not_weaker() {
+            let clue = Clue::Nearer {
                 a: cell(0, 0),
                 b: cell(2, 0),
             };
-            let n2 = Clue::Nearer {
+
+            assert_eq!(clue.is_weaker_than(clue), Ok(false));
+        }
+
+        // ---- Same type, incompatible ----
+
+        #[test]
+        fn within_with_different_centres_fails() {
+            let x = Clue::Within {
+                centre: cell(0, 0),
+                radius: 3,
+            };
+            let y = Clue::Within {
+                centre: cell(1, 0),
+                radius: 3,
+            };
+
+            assert!(x.is_weaker_than(y).is_err());
+        }
+
+        #[test]
+        fn beyond_with_different_centres_fails() {
+            let x = Clue::Beyond {
+                centre: cell(0, 0),
+                radius: 3,
+            };
+            let y = Clue::Beyond {
+                centre: cell(1, 0),
+                radius: 3,
+            };
+
+            assert!(x.is_weaker_than(y).is_err());
+        }
+
+        #[test]
+        fn half_plane_with_different_axes_fails() {
+            let x = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtLeast(1),
+            };
+            let y = Clue::HalfPlane {
+                axis: Axis::R,
+                bound: Bound::AtLeast(1),
+            };
+
+            assert!(x.is_weaker_than(y).is_err());
+        }
+
+        #[test]
+        fn half_plane_with_opposite_bound_kinds_fails() {
+            let x = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtLeast(1),
+            };
+            let y = Clue::HalfPlane {
+                axis: Axis::Q,
+                bound: Bound::AtMost(1),
+            };
+
+            assert!(x.is_weaker_than(y).is_err());
+        }
+
+        #[test]
+        fn nearer_with_different_a_fails() {
+            let x = Clue::Nearer {
+                a: cell(0, 0),
+                b: cell(2, 0),
+            };
+            let y = Clue::Nearer {
                 a: cell(1, 0),
                 b: cell(2, 0),
             };
-            assert!(n1.is_weaker_than(n2).is_err());
+
+            assert!(x.is_weaker_than(y).is_err());
         }
+
+        // ---- Different types ----
 
         #[test]
         fn different_type_clues_cannot_be_compared() {
@@ -448,5 +483,9 @@ pub mod tests {
             assert!(half.is_weaker_than(nearer).is_err());
             assert!(nearer.is_weaker_than(within).is_err());
         }
+    }
+
+    mod weaken_tests {
+        use super::*;
     }
 }
