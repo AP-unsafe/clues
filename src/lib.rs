@@ -57,23 +57,35 @@ impl Display for Bound {
 }
 
 impl Bound {
-    // relaxes (makes it weaker) a bound by amount
-    fn relax(self, amount: u32) -> Option<Bound> {
+    // Relaxes (makes it weaker) a bound by amount.
+    // Panics if the resulting bound exceeds the i32 range.
+    fn relax(self, amount: u32) -> Bound {
         let amount = i64::from(amount);
         match self {
             AtLeast(n) => {
-                let value = i64::from(n).checked_sub(amount)?;
-                Some(AtLeast(i32::try_from(value).ok()?))
+                let value = i64::from(n)
+                    .checked_sub(amount)
+                    .expect("Cannot weaken HalfPlane clue: bound overflow");
+
+                AtLeast(
+                    i32::try_from(value).expect("Cannot weaken HalfPlane clue: bound out of range"),
+                )
             }
             AtMost(n) => {
-                let value = i64::from(n).checked_add(amount)?;
-                Some(AtMost(i32::try_from(value).ok()?))
+                let value = i64::from(n)
+                    .checked_add(amount)
+                    .expect("Cannot weaken HalfPlane clue: bound overflow");
+
+                AtMost(
+                    i32::try_from(value).expect("Cannot weaken HalfPlane clue: bound out of range"),
+                )
             }
         }
     }
 }
 
 impl Clue {
+    /// TODO: missing docs for "holds"
     // True when this clue is consistent with the treasure lying in ‘cell‘.
     pub fn holds(self, cell: Cell) -> bool {
         match self {
@@ -94,77 +106,80 @@ impl Clue {
         }
     }
 
-    pub fn weaken(self, map: &Map, times: u32) -> Option<Clue> {
+    /// TODO: missing docs for "weaken"
+    pub fn weaken(self, map: &impl Map, times: u32) -> Clue {
         match self {
             Clue::Within { centre, radius } => {
-                let new_radius = radius.checked_add(times)?;
+                let new_radius = radius
+                    .checked_add(times)
+                    .expect("Cannot weaken Within clue: radius overflow");
 
-                Some(Clue::Within {
+                Clue::Within {
                     centre,
                     radius: new_radius,
-                })
-            }
-            Clue::Beyond { centre, radius } => {
-                let new_radius = radius.checked_sub(times)?;
-
-                Some(Clue::Beyond {
-                    centre,
-                    radius: new_radius,
-                })
-            }
-            Clue::HalfPlane { axis, bound } => Some(Clue::HalfPlane {
-                axis,
-                bound: bound.relax(times)?,
-            }),
-            Clue::Nearer { a, b } => {
-                // if a == b -> can't calculate the direction
-                if times < 2 || a == b {
-                    return None;
                 }
+            },
+            Clue::Beyond { centre, radius } => {
+                let new_radius = radius
+                    .checked_sub(times)
+                    .expect("Cannot weaken Beyond clue: radius underflow");
 
-                // Calculate the direction from A to B
+                Clue::Beyond {
+                    centre,
+                    radius: new_radius,
+                }
+            },
+            Clue::HalfPlane { axis, bound } => Clue::HalfPlane {
+                axis,
+                bound: bound.relax(times),
+            },
+            Clue::Nearer { a, b } => {
+                assert!(
+                    times >= 2,
+                    "Cannot weaken Nearer clue: times must be at least 2"
+                );
+
+                assert!(
+                    a != b,
+                    "Cannot weaken Nearer clue: cells A and B are identical"
+                );
+
+                // Calculate the direction from A to B.
                 let direction_q = i64::from(b.q) - i64::from(a.q);
                 let direction_r = i64::from(b.r) - i64::from(a.r);
 
-                // Generate all valid candidate cells inside the map
-                let mut candidates: Vec<(u32, Cell)> = Vec::new();
+                // Calculate the new position using the requested multiplier
+                let k = i64::from(times);
 
-                // k indicates how far along the axis between A and B the candidate cell is
-                let mut k: u32 = 2;
+                let new_q = i64::from(a.q)
+                    .checked_add(
+                        k.checked_mul(direction_q)
+                            .expect("Cannot weaken Nearer clue: overflow"),
+                    )
+                    .expect("Cannot weaken Nearer clue: overflow");
 
-                loop {
-                    // Calculate candidate coordinates using checked arithmetic
-                    let k_i64 = i64::from(k);
+                let new_r = i64::from(a.r)
+                    .checked_add(
+                        k.checked_mul(direction_r)
+                            .expect("Cannot weaken Nearer clue: overflow"),
+                    )
+                    .expect("Cannot weaken Nearer clue: overflow");
 
-                    let q = i64::from(a.q).checked_add(k_i64.checked_mul(direction_q)?)?;
+                // Convert the coordinates back to i32
+                let new_b = Cell {
+                    q: i32::try_from(new_q)
+                        .expect("Cannot weaken Nearer clue: q coordinate out of range"),
+                    r: i32::try_from(new_r)
+                        .expect("Cannot weaken Nearer clue: r coordinate out of range"),
+                };
 
-                    let r = i64::from(a.r).checked_add(k_i64.checked_mul(direction_r)?)?;
+                // The new cell must belong to the map
+                assert!(
+                    map.contains(new_b),
+                    "Cannot weaken Nearer clue: new cell is outside the map"
+                );
 
-                    // Convert coordinates back to i32
-                    let candidate = Cell {
-                        q: i32::try_from(q).ok()?,
-                        r: i32::try_from(r).ok()?,
-                    };
-
-                    // Stop when the candidate leaves the map
-                    if !map.contains(candidate) {
-                        break;
-                    }
-
-                    candidates.push((k, candidate));
-
-                    // Avoid overflowing the multiplier
-                    k = k.checked_add(1)?;
-                }
-
-                // Select the candidate corresponding to the requested multiplier
-                let new_b = candidates
-                    .iter()
-                    .find(|(candidate_k, _)| *candidate_k == times)
-                    .map(|(_, cell)| *cell)?;
-
-                // Return the weakened clue
-                Some(Clue::Nearer { a, b: new_b })
+                Clue::Nearer { a, b: new_b }
             }
         }
     }

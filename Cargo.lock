@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "ap-2026-common-code-geometry"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#d328304379354e24eeee0d869297751ce8005fc3"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
 dependencies = [
  "ap-2026-common-code-shared",
  "thiserror",
@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "ap-2026-common-code-shared"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#d328304379354e24eeee0d869297751ce8005fc3"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
 
 [[package]]
 name = "clues"
