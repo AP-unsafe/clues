@@ -1,3 +1,8 @@
+#![deny(unsafe_code)]
+#![deny(clippy::pedantic)]
+// TODO: docs
+// #![deny(missing_docs)]
+
 use std::fmt::Display;
 
 use crate::Bound::{AtLeast, AtMost};
@@ -5,7 +10,6 @@ use crate::Bound::{AtLeast, AtMost};
 use geometry::{Cell, Map};
 
 // TODO: logs
-// TODO: run pedantic clippy
 
 #[non_exhaustive]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -57,36 +61,19 @@ impl Display for Bound {
 }
 
 impl Bound {
-    // Relaxes (makes it weaker) a bound by amount.
-    // Panics if the resulting bound exceeds the i32 range.
+    // if the overflow was to happen -> saturate i32
     fn relax(self, amount: u32) -> Bound {
-        let amount = i64::from(amount);
+        let a = i32::try_from(amount).unwrap_or(i32::MAX);
         match self {
-            AtLeast(n) => {
-                let value = i64::from(n)
-                    .checked_sub(amount)
-                    .expect("Cannot weaken HalfPlane clue: bound overflow");
-
-                AtLeast(
-                    i32::try_from(value).expect("Cannot weaken HalfPlane clue: bound out of range"),
-                )
-            }
-            AtMost(n) => {
-                let value = i64::from(n)
-                    .checked_add(amount)
-                    .expect("Cannot weaken HalfPlane clue: bound overflow");
-
-                AtMost(
-                    i32::try_from(value).expect("Cannot weaken HalfPlane clue: bound out of range"),
-                )
-            }
+            AtLeast(n) => AtLeast(n.saturating_sub(a)),
+            AtMost(n) => AtMost(n.saturating_add(a)),
         }
     }
 }
 
 impl Clue {
-    /// TODO: missing docs for "holds"
     // True when this clue is consistent with the treasure lying in ‘cell‘.
+    #[must_use]
     pub fn holds(self, cell: Cell) -> bool {
         match self {
             Clue::Within { centre, radius } => cell.distance(centre) <= radius,
@@ -106,89 +93,64 @@ impl Clue {
         }
     }
 
-    /// TODO: missing docs for "weaken"
-    pub fn weaken(self, map: &impl Map, times: u32) -> Clue {
+    /// # Errors
+    pub fn weaken(self, map: &impl Map, times: u32) -> Result<Clue, String> {
         match self {
-            Clue::Within { centre, radius } => {
-                let new_radius = radius
-                    .checked_add(times)
-                    .expect("Cannot weaken Within clue: radius overflow");
-
-                Clue::Within {
-                    centre,
-                    radius: new_radius,
-                }
-            },
-            Clue::Beyond { centre, radius } => {
-                let new_radius = radius
-                    .checked_sub(times)
-                    .expect("Cannot weaken Beyond clue: radius underflow");
-
-                Clue::Beyond {
-                    centre,
-                    radius: new_radius,
-                }
-            },
-            Clue::HalfPlane { axis, bound } => Clue::HalfPlane {
+            Clue::Within { centre, radius } => Ok(Clue::Within {
+                centre,
+                radius: radius.saturating_add(times), // sets the radius to u32::MAX if overflowed
+            }),
+            Clue::Beyond { centre, radius } => Ok(Clue::Beyond {
+                centre,
+                radius: radius.saturating_sub(times), // sets the radius to u32::MIN if underflowed
+            }),
+            Clue::HalfPlane { axis, bound } => Ok(Clue::HalfPlane {
                 axis,
                 bound: bound.relax(times),
-            },
+            }),
             Clue::Nearer { a, b } => {
-                assert!(
-                    times >= 2,
-                    "Cannot weaken Nearer clue: times must be at least 2"
-                );
+                // if times is 0 or 1 -> return self, nothing to weaken
+                if times < 2 {
+                    return Ok(self);
+                }
 
-                assert!(
-                    a != b,
-                    "Cannot weaken Nearer clue: cells A and B are identical"
-                );
+                // if a == b the clue cannot be weakened -> return self
+                if a == b {
+                    return Ok(self);
+                }
 
-                // Calculate the direction from A to B.
-                let direction_q = i64::from(b.q) - i64::from(a.q);
-                let direction_r = i64::from(b.r) - i64::from(a.r);
-
-                // Calculate the new position using the requested multiplier
+                // upcast to i64 for safer arithmetics here
+                // since u32 reaches values a lot bigger than i32 does
+                // no panics here is deliberate, since an island may try to weaken a clue more than
+                // once and accidently go outside the map
                 let k = i64::from(times);
+                let dir_q = i64::from(b.q) - i64::from(a.q);
+                let dir_r = i64::from(b.r) - i64::from(a.r);
 
-                let new_q = i64::from(a.q)
-                    .checked_add(
-                        k.checked_mul(direction_q)
-                            .expect("Cannot weaken Nearer clue: overflow"),
-                    )
-                    .expect("Cannot weaken Nearer clue: overflow");
+                let new_q = i64::from(a.q) + k * dir_q;
+                let new_r = i64::from(a.r) + k * dir_r;
 
-                let new_r = i64::from(a.r)
-                    .checked_add(
-                        k.checked_mul(direction_r)
-                            .expect("Cannot weaken Nearer clue: overflow"),
-                    )
-                    .expect("Cannot weaken Nearer clue: overflow");
-
-                // Convert the coordinates back to i32
-                let new_b = Cell {
-                    q: i32::try_from(new_q)
-                        .expect("Cannot weaken Nearer clue: q coordinate out of range"),
-                    r: i32::try_from(new_r)
-                        .expect("Cannot weaken Nearer clue: r coordinate out of range"),
+                let (Ok(q), Ok(r)) = (i32::try_from(new_q), i32::try_from(new_r)) else {
+                    return Err("Nearer: new cell is outside the map".into());
                 };
 
-                // The new cell must belong to the map
-                assert!(
-                    map.contains(new_b),
-                    "Cannot weaken Nearer clue: new cell is outside the map"
-                );
+                let new_b = Cell { q, r };
+                if !map.contains(new_b) {
+                    return Err("Nearer: new cell is outside the map".into());
+                }
 
-                Clue::Nearer { a, b: new_b }
+                Ok(Clue::Nearer { a, b: new_b })
             }
         }
     }
-
     // returns true if self is weaker than other
     // if self is atleast as strong as other -> returns false
     // returns Err if the two clues are of different types
     // useful for ships that will be trying to figure out if the clue they received is a weaker than
     // a previous one
+    /// todo
+    /// # Errors
+    ///
     pub fn is_weaker_than(self, other: Clue) -> Result<bool, String> {
         match (self, other) {
             //Two within clues
@@ -259,7 +221,7 @@ impl Display for Clue {
                 centre.s(),
             ),
             Clue::HalfPlane { axis, bound } => {
-                format!("The treasure is {} on the {} axis", bound, axis)
+                format!("The treasure is {bound} on the {axis} axis")
             }
             Clue::Nearer { a, b } => format!(
                 "The treasure is nearer to ({}, {}, {}) than to ({}, {}, {})",
